@@ -12,11 +12,7 @@
 
 #pragma once
 
-#include <guid_utils.h>
-#include <NGP_Utils.h>
-#include <wchar_ngp.h>
-#include <cpp_compiler_features.h>
-#include <CNGPStringA.h>
+#include <guiddef.h>
 
 #ifdef _WIN32
 #define CNGPSTRING_EMBEDED_IMPL
@@ -25,7 +21,7 @@
 /**
 \brief This class is used to pass safely unicode string between dlls.
 */
-class NGP_UTILS_API CNGPString
+class CNGPString
 {
 public:
 	CNGPString( void );
@@ -89,7 +85,6 @@ public:
 	int Remove( wchar_ngp chOld );
 	/**
 	*/
-	bool serialize ( class CNGPBasicArchive& archive );
 
 	static CNGPString BuildFromGUID (  const GUID& id );
 
@@ -114,25 +109,9 @@ public:
 	void clear();
 	int CompareNoCase(const wchar_ngp * str) const;
 	bool EqualNoCase(const wchar_ngp * str) const { return CompareNoCase(str)==0; }
-	friend NGP_UTILS_API CNGPString operator + ( const CNGPString & string1, const CNGPString & string2 );
-	friend NGP_UTILS_API CNGPString operator + ( const CNGPString & string1, const wchar_ngp * string2 );
-	friend NGP_UTILS_API CNGPString operator + ( const wchar_ngp * string1, const CNGPString & string2 );
-
-	/**
-	Loads string from resource DLL.
-	\param id - id of resource string
-	\param hInstance - HINSTANCE of resource DLL
-	\return true if success
-	*/
-	bool Load_String ( unsigned int id, void * hInstance );
-
-	/**
-	Loads string from resource DLL.
-	\param id - id of resource string
-	\param hInstance - HINSTANCE of resource DLL
-	\return true if success
-	*/
-	bool Load_String ( unsigned int id, const class CNGPStringResourceDll * pStringResourceDll );
+	friend CNGPString operator + ( const CNGPString & string1, const CNGPString & string2 );
+	friend CNGPString operator + ( const CNGPString & string1, const wchar_ngp * string2 );
+	friend CNGPString operator + ( const wchar_ngp * string1, const CNGPString & string2 );
 
 #ifdef CPP_MOVE_SEMANTIC_AVAILABLE
 	CNGPString ( CNGPString&& );
@@ -219,7 +198,7 @@ public:
 		if( len == 0 ) {
 			s << "[empty]";
 		} else {
-			s << CNGPStringA( *this ).c_str();
+//			s << CNGPStringA( *this ).c_str();
 		}
 	}
 
@@ -243,27 +222,3 @@ private:
 	TShadingPlacement m_Placement;
 #endif
 };
-
-template <class J> void load_json( const J & j, CNGPString & s )
-{
-    CNGPStringA strA;
-    load_json( j, strA );
-    s.AssignUTF8( strA.c_str() );
-}
-
-template <class J> void save_json( J & j, const CNGPString & s )
-{
-    save_json( j, CNGPStringA( s ) );
-}
-
-template <class X> void load_xml( X node, CNGPString & s )
-{
-    CNGPStringA strA;
-    load_xml( node, strA );
-    s.AssignUTF8( strA.c_str() );
-}
-
-template <class X> void save_xml( X node, const CNGPString & s )
-{
-    save_xml( node, CNGPStringA( s ) );
-}

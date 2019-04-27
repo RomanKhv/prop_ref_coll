@@ -18,8 +18,6 @@
 #include <boost/function.hpp>
 #include <vector>
 #include <boost/functional/hash_fwd.hpp>
-#include <cpp_compiler_features.h>
-#include <assert_macro.h>
 
 #ifdef _MSC_VER
 #pragma warning(disable : 4996)

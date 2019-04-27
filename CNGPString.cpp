@@ -12,20 +12,19 @@
 
 #include "StdAfx.h"
 
-#include <boost/scoped_array.hpp>
 #include <algorithm>
 #include <stdarg.h>
 #include <cctype>
+#include <string>
+#include <wchar.h>
+#include <boost/scoped_array.hpp>
 #include <boost/lambda/lambda.hpp>
 #include <boost/lambda/bind.hpp>
 #include <boost/lambda/if.hpp>
 #include <boost/format.hpp>
 #include <boost/algorithm/string/replace.hpp>
-#include <CNGPStream.h>
-#include <CNGPStringResourceDll.h>
 
-#include <CNGPString.h>
-#include <CNGPStringA.h>
+#include "CNGPString.h"
 #include "CWStringShading.h"
 
 #ifdef _WIN32
@@ -217,45 +216,21 @@ CNGPString& CNGPString::operator+=( const CNGPString& str )
 	return *this;
 }
 
-bool CNGPString::Load_String ( unsigned int id, void * hInstance )
-{
-#ifdef _WIN32
-	if( !hInstance ) return false;
-
-	CString sz;
-	if ( ! sz.LoadString ( (HINSTANCE)hInstance, id ) )
-		return false;
-
-	*this = (const wchar_ngp *) sz.GetString ( );
-	return true;
-#else		// Unix
-	return false;		// no resources in Unix...
-#endif
-}
-
-bool CNGPString::Load_String ( unsigned int id, const CNGPStringResourceDll * pStringResourceDll )
-{
-	if( ! pStringResourceDll )
-		return false;
-
-	return pStringResourceDll->LoadResourceString( id, *this );
-}
-
-NGP_UTILS_API CNGPString operator + ( const CNGPString & string1, const CNGPString & string2 )
+CNGPString operator + ( const CNGPString & string1, const CNGPString & string2 )
 {
 	CNGPString str( string1 );
 	str.m_pStr->append ( *string2.m_pStr );
 	return str;
 }
 
-NGP_UTILS_API CNGPString operator + ( const CNGPString & string1, const wchar_ngp * string2 )
+CNGPString operator + ( const CNGPString & string1, const wchar_ngp * string2 )
 {
 	CNGPString str( string1 );
 	str.m_pStr->append ( string2 );
 	return str;
 }
 
-NGP_UTILS_API CNGPString operator + ( const wchar_ngp * string1, const CNGPString & string2 )
+CNGPString operator + ( const wchar_ngp * string1, const CNGPString & string2 )
 {
 	CNGPString str( string1 );
 	str.m_pStr->append ( string2.m_pStr->c_str() );
@@ -500,29 +475,6 @@ CNGPString& CNGPString::MakeLower()
 	return *this;
 }
 
-bool CNGPString::serialize ( CNGPBasicArchive& archive )
-{
-	bool res = false;
-	if ( archive.IsStoring ( ) ) {
-		CNGPStringA sz ( c_str() );
-		size_t length = strlen ( sz.c_str ( ) );
-		ngp_shared_array<char> data;
-		data.resize ( length + 1 );
-		data.at ( length ) = 0;
-		memcpy ( data.c_array ( ), sz.c_str ( ), length );
-		res = archive.serialize ( data );
-	}
-	else {
-		ngp_shared_array<char> data;
-		res = archive.serialize ( data );
-		if ( res && data.size ( ) ) {
-//			*m_pStr = CWStringShading( data.begin ( ) );
-			AssignUTF8( data.begin() );
-		}
-	}
-	return res;
-}
-
 static void convert_utf8_to_utf16(const boost::uint8_t * src, boost::uint16_t * dst)
 {
 	do {
@@ -651,23 +603,6 @@ void CNGPString::AssignUTF8(const char * src)
 
 void CNGPString::AssignUTF16(const boost::uint16_t * src)
 {
-#ifdef _WIN32
-	_ASSERT( sizeof(wchar_t)==2 );
-
-	// this is simple
-	*this = src;
-#else		// Unix
-	_ASSERT( sizeof(wchar_t)==4 );
-
-	const int utf32_len = calc_utf16_to_utf32_strlen(src);
-	if( utf32_len <= 0 ) {
-		clear();
-		return;
-	}
-	boost::scoped_array< boost::uint32_t > dstStr( new boost::uint32_t [ utf32_len + 1 ] );
-	convert_utf16_to_utf32( src, dstStr.get() );
-	*m_pStr = (const wchar_t *)( dstStr.get() );
-#endif		// _WIN32
 }
 
 unsigned int CNGPString::GetUTF16(boost::uint16_t * dst) const

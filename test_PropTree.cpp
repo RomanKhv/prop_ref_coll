@@ -1,51 +1,8 @@
-/**********************************************
-  Copyright Mentor Graphics Corporation 2018
-
-    All Rights Reserved.
-
- THIS WORK CONTAINS TRADE SECRET
- AND PROPRIETARY INFORMATION WHICH IS THE
- PROPERTY OF MENTOR GRAPHICS
- CORPORATION OR ITS LICENSORS AND IS
- SUBJECT TO LICENSE TERMS. 
-**********************************************/
-
-#include "StdAfx.h"
+#include "stdafx.h"
 #include <boost/test/unit_test.hpp>
 
-//#include <boost\property_tree\json_parser.hpp>
-#include <font_definition.h>
-#include <file_io\ngp_file_io.h>
-#include <CNGPStringA.h>
-#include "..\prop_ref_coll.h"
-#include "..\xml_tags.h"
-#include "..\xml_serialization_helpers.h"
-#include "..\CutPlot.h"
-#include "..\SurfacePlot.h"
-#include "..\IsosurfacePlot.h"
-#include "..\GoalPlot.h"
-#include "..\SurfaceParametersPlot.h"
-#include "..\PointParametersPlot.h"
-#include "..\XYPlot.h"
-#include "..\FlowTrajectoriesPlot.h"
-#include "..\Project.h"
-#include "..\ParticleStudy.h"
-#include "..\ParticleBC.h"
-#include "..\ParticleIC.h"
-#include "..\ParticleInjection.h"
-#include "..\ExcelParameter.h"
-#include "..\MeshPlot.h"
-#include "..\ProjectData.h"
-#include "..\FlowTrajectoriesPlotExporter.h"
-#include "..\Document.h"
-#include "..\Configuration.h"
-#include "..\Project.h"
-#include "..\feature_utils.h"
-#include "..\AnsysExport.h"
-#include "..\GeomRef.h"
-#include "..\FluxBalance.h"
-#include <RPR\rpr_structs.h>
-#include <RPR\ngp_postprocessor.h>
+//#include <boost/property_tree/json_parser.hpp>
+#include "prop_ref_coll.h"
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -92,13 +49,214 @@ enum TestEnum { e_item1, e_item2, e_item3, e_item4, e_item5 };
 		p2.LoadFromPTree( pt );					\
 		BOOST_CHECK( p2.IsEqualTo( p3 ) );		\
 		ngp_file_io::INGPFileIOPtr bin_file = ngp_file_io::CreateFileIO();	\
-		bin_file->open((test_dir / L"_bin_file.bin").c_str(), L"wb");		\
+		bin_file->open((test_dir / L"_bin_file.bin").wstring().c_str(), L"wb");		\
 		p2.SaveToBinFile(bin_file);											\
 		bin_file->close();													\
 		p2.CopyFrom(p1);													\
-		bin_file->open((test_dir / L"_bin_file.bin").c_str(), L"rb");							\
+		bin_file->open((test_dir / L"_bin_file.bin").wstring().c_str(), L"rb");							\
 		p2.LoadFromBinFile(bin_file);										\
 		BOOST_CHECK( p2.IsEqualTo( p3 ) );
+
+std::wstring utf16_string(std::string&& utf8_string)
+{
+    return std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>>().from_bytes(utf8_string);
+}
+
+GeomRef rand_geom_ref()
+{
+	const char* name_base[] = { "ref", "—Ä–µ—Ñ–µ—Ä–µ–Ω—Å" };
+	const FWPostGeomReferenceType types[] = { fwPostGeomReferenceFace, fwPostGeomReferencePlane };
+
+	GeomRef gr;
+	gr.uuid.Format( L"id%d", ut_utils::rand() );
+	gr.name.Format( L"%s%d", utf16_string(name_base[ut_utils::rand(2)]).c_str(), ut_utils::rand() );
+	gr.type = types[ut_utils::rand(2)];
+
+	return gr;
+}
+
+void randomize_Palette( IPlotPalette* pal )
+{
+	pal->SetParameter( ut_utils::rand_string(L"Param") );
+	pal->SetParamMin( PARAM_MIN_MAX_VALUE(ut_utils::rand(), false, false) );
+	pal->SetParamMax( PARAM_MIN_MAX_VALUE(ut_utils::rand(), false, true) );
+	pal->SetCoordFrame( ut_utils::rand_string(L"CoordFrameName"), ut_utils::rand_string(L"CoordFrameUUID"), CNGPCoordinateSystem() );
+	pal->SetLevelsNumber( ut_utils::rand(100) );
+}
+
+void randomize_FTPIBase( CFTPIBaseAppearance& app )
+{
+	randomize_Palette( app.GetTrajsColorizationPalette() );
+	app.SetColorByParam( ut_utils::rand_bool() );
+	app.SetColor( ut_utils::rand() );
+}
+
+void randomize( const CParticleInjectionPtr& inj )
+{
+	randomize_FTPIBase( *inj );
+	inj->SetMaterialInfo( ut_utils::rand_string(L"Material"), FwEngineeringDBContentTypes( int(1 << (ut_utils::rand(10))) ) );
+	inj->SetVelocityType( FWParticleICVelocityType( ut_utils::rand(2) ) );
+	inj->SetTemperatureType( FWParticleICTemperatureType( ut_utils::rand(2) ) );
+}
+
+void randomize( const CParticleStudyPtr& ps )
+{
+	ps->SetMaxLength( ut_utils::rand(500) );
+	ps->SetMaxTstep( ut_utils::rand(100) );
+	ps->SetEnableGravity( ut_utils::rand_bool() );
+	ps->SetAccretionRate( ut_utils::rand_bool() );
+}
+
+bool explicitly_equal( const IPlotPalette* p1, const IPlotPalette* p2 )
+{
+	if ( p1->GetVisParameter() != p2->GetVisParameter() )
+		return false;
+	PARAM_MIN_MAX_VALUE mm1, mm2;
+	p1->GetParamMin( mm1 );
+	p2->GetParamMin( mm2 );
+	if ( mm1 != mm2 )
+		return false;
+
+	if ( p1->GetCoordFrameUUID() != p2->GetCoordFrameUUID() )
+		return false;
+// 	if ( p1->GetCoordFrameName() != p2->GetCoordFrameName() )
+// 		return false;
+	if ( p1->IsScaleLogarithmic() != p2->IsScaleLogarithmic() )
+		return false;
+	if ( p1->GetColorsNumber() != p2->GetColorsNumber() )
+		return false;
+	if ( p1->GetColoringScheme() != p2->GetColoringScheme() )
+		return false;
+	if ( p1->GetOuterMinMaxColoring() != p2->GetOuterMinMaxColoring() )
+		return false;
+	if ( p1->GetOuterMinColor() != p2->GetOuterMinColor() )
+		return false;
+	if ( p1->GetOuterMaxColor() != p2->GetOuterMaxColor() )
+		return false;
+	if ( p1->GetDisplayOuterColors() != p2->GetDisplayOuterColors() )
+		return false;
+	if ( p1->GetColorbarOrientation() != p2->GetColorbarOrientation() )
+		return false;
+	if ( p1->GetRotatedText() != p2->GetRotatedText() )
+		return false;
+	if ( p1->GetDisplayTitle() != p2->GetDisplayTitle() )
+		return false;
+	if ( p1->GetDisplayPlotNames() != p2->GetDisplayPlotNames() )
+		return false;
+	if ( p1->GetDisplayPlotsMinMaxes() != p2->GetDisplayPlotsMinMaxes() )
+		return false;
+	if ( p1->GetUseDefaultFont() != p2->GetUseDefaultFont() )
+		return false;
+	CFontDef f1, f2;
+	p1->GetFont( f1 );
+	p2->GetFont( f2 );
+	if ( f1 != f2 )
+		return false;
+	if ( p1->GetAutoScaleFont() != p2->GetAutoScaleFont() )
+		return false;
+	if ( p1->GetBackgroundColor() != p2->GetBackgroundColor() )
+		return false;
+	if ( p1->GetBackgroundTransparency() != p2->GetBackgroundTransparency() )
+		return false;
+	if ( p1->GetWidth() != p2->GetWidth() )
+		return false;
+	if ( p1->GetAutoNumberOfTicks() != p2->GetAutoNumberOfTicks() )
+		return false;
+	if ( p1->GetNumberOfTicks() != p2->GetNumberOfTicks() )
+		return false;
+
+	return true;
+}
+
+bool explicitly_equal( const CParticleInjection& inj1, const CParticleInjection& inj2 )
+{
+	// INGP_FTPIBaseAppearance
+	if ( !explicitly_equal( const_cast<CParticleInjection&>(inj1).GetTrajsColorizationPalette(), const_cast<CParticleInjection&>(inj2).GetTrajsColorizationPalette() ) )
+		return false;
+	if ( inj1.GetDisplayStyle() != inj2.GetDisplayStyle() )
+		return false;
+	if ( inj1.GetLineWidth() != inj2.GetLineWidth() )
+		return false;
+	if ( inj1.GetCrossSize() != inj2.GetCrossSize() )
+		return false;
+	if ( inj1.GetColor() != inj2.GetColor() )
+		return false;
+	if ( inj1.GetColorByParam() != inj2.GetColorByParam() )
+		return false;
+	if ( inj1.GetFTType() != inj2.GetFTType() )
+		return false;
+	if ( inj1.GetDynTrajStyle() != inj2.GetDynTrajStyle() )
+		return false;
+	if ( inj1.GetDynTrajWidth() != inj2.GetDynTrajWidth() )
+		return false;
+	if ( inj1.GetDynTrajSpacing() != inj2.GetDynTrajSpacing() )
+		return false;
+	
+	// INGP_ParticleInjection
+	if ( inj1.GetMaterial() != inj2.GetMaterial() )
+		return false;
+	if ( inj1.GetMaterialType() != inj2.GetMaterialType() )
+		return false;
+	if ( inj1.GetVelocityType() != inj2.GetVelocityType() )
+		return false;
+	if ( inj1.GetTemperatureType() != inj2.GetTemperatureType() )
+		return false;
+
+	return true;
+}
+
+bool explicitly_equal( const CParticleStudy& ps1, const CParticleStudy& ps2 )
+{
+	if ( ps1.GetInjections().size() != ps2.GetInjections().size() )
+		return false;
+	if ( ps1.IsParticle() != ps2.IsParticle() )
+		return false;
+	if ( ps1.IsGravity() != ps2.IsGravity() )
+		return false;
+	if ( ps1.IsAccretionRate() != ps2.IsAccretionRate() )
+		return false;
+	if ( ps1.IsErosionRate() != ps2.IsErosionRate() )
+		return false;
+
+	// INGP_ParticleBase
+	if ( ps1.GetRelativeToAbsFrame() != ps2.GetRelativeToAbsFrame() )
+		return false;
+	if ( ps1.GetMaxLength() != ps2.GetMaxLength() )
+		return false;
+	if ( ps1.GetMaxTime() != ps2.GetMaxTime() )
+		return false;
+	if ( ps1.GetMaxTstep() != ps2.GetMaxTstep() )
+		return false;
+	if ( ps1.GetDirection() != ps2.GetDirection() )
+		return false;
+	if ( ps1.GetFlowTrajType() != ps2.GetFlowTrajType() )
+		return false;
+	if ( ps1.IsSaveToASCII() != ps2.IsSaveToASCII() )
+		return false;
+	if ( ps1.GetASCIIFile() != ps2.GetASCIIFile() )
+		return false;
+
+	return true;
+}
+
+bool explicitly_equal( const CFeaturePtr& f1, const CFeaturePtr& f2 )
+{
+	if ( f1->GetType() != f2->GetType() )
+		return false;
+
+	switch ( f1->GetType() )
+	{
+		case ft_particle_study:
+			return explicitly_equal( static_cast<const CParticleStudy&>(*f1), static_cast<const CParticleStudy&>(*f2) );
+		case ft_particle_injection:
+			return explicitly_equal( static_cast<const CParticleInjection&>(*f1), static_cast<const CParticleInjection&>(*f2) );
+	}
+	return true;
+}
+
+#define CHECK_EQUAL_FEATURES( f1, f2 ) \
+	BOOST_CHECK_MESSAGE( *f1==*f2,                ut_utils::to_string(f1->GetType()) ); \
+	BOOST_CHECK_MESSAGE( explicitly_equal(f1,f2), ut_utils::to_string(f1->GetType()) );
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -219,45 +377,45 @@ BOOST_AUTO_TEST_CASE(test_PropertiesSeparately)
 
 	{
 		{
-			std::list<std::wstring> c1 = boost::assign::list_of(L"str1")(L"str2")(L"str3");
-			std::list<std::wstring> c2 = boost::assign::list_of(L"str1")(L"str2")(L"str3");
-			std::list<std::wstring> c3 = boost::assign::list_of(L"str7")(L"str8")(L"str9");
+            std::list<std::wstring> c1 = { L"str1", L"str2", L"str3" };
+            std::list<std::wstring> c2 = { L"str1", L"str2", L"str3" };
+            std::list<std::wstring> c3 = { L"str7", L"str8", L"str9" };
 			CPropertyContainerOfSimple<std::list<std::wstring>> p1 (&c1, L"tag");
 			CPropertyContainerOfSimple<std::list<std::wstring>> p2 (&c2, L"tag");
 			CPropertyContainerOfSimple<std::list<std::wstring>> p3 (&c3, L"tag");
 			STANDARD_PROPERTY_TEST(p1, p2, p3);
 		}
 		{
-			std::vector<std::wstring> c1 = boost::assign::list_of(L"str1")(L"str2")(L"str3");
-			std::vector<std::wstring> c2 = boost::assign::list_of(L"str1")(L"str2")(L"str3");
-			std::vector<std::wstring> c3 = boost::assign::list_of(L"str7")(L"str8")(L"str9");
+            std::vector<std::wstring> c1 = { L"str1", L"str2", L"str3" };
+            std::vector<std::wstring> c2 = { L"str1", L"str2", L"str3" };
+            std::vector<std::wstring> c3 = { L"str7", L"str8", L"str9" };
 			CPropertyContainerOfSimple<std::vector<std::wstring>> p1 (&c1, L"tag");
 			CPropertyContainerOfSimple<std::vector<std::wstring>> p2 (&c2, L"tag");
 			CPropertyContainerOfSimple<std::vector<std::wstring>> p3 (&c3, L"tag");
 			STANDARD_PROPERTY_TEST(p1, p2, p3);
 		}
 		{
-			std::vector<CNGPString> v1 = boost::assign::list_of(CNGPString(L"str1"))(CNGPString(L"str2"))(CNGPString(L"str3"));
-			std::vector<CNGPString> v2 = boost::assign::list_of(CNGPString(L"str1"))(CNGPString(L"str2"))(CNGPString(L"str3"));
-			std::vector<CNGPString> v3 = boost::assign::list_of(CNGPString(L"str7"))(CNGPString(L"str8"))(CNGPString(L"str9"));
+            std::vector<CNGPString> v1 = { CNGPString(L"str1"), CNGPString(L"str2"), CNGPString(L"str3") };
+            std::vector<CNGPString> v2 = { CNGPString(L"str1"), CNGPString(L"str2"), CNGPString(L"str3") };
+            std::vector<CNGPString> v3 = { CNGPString(L"str7"), CNGPString(L"str8"), CNGPString(L"str9") };
 			CPropertyContainerOfSimple<std::vector<CNGPString>> p1 (&v1, L"tag");
 			CPropertyContainerOfSimple<std::vector<CNGPString>> p2 (&v2, L"tag");
 			CPropertyContainerOfSimple<std::vector<CNGPString>> p3 (&v3, L"tag");
 			STANDARD_PROPERTY_TEST(p1, p2, p3);
 		}
 		{
-			std::vector<long> c1 = boost::assign::list_of(1)(2)(3);
-			std::vector<long> c2 = boost::assign::list_of(1)(2)(3);
-			std::vector<long> c3 = boost::assign::list_of(3)(2)(1);
+            std::vector<long> c1 = { 1, 2, 3 } ;
+            std::vector<long> c2 = { 1, 2, 3 };
+            std::vector<long> c3 = { 3, 2, 1 };
 			CPropertyContainerOfSimple<std::vector<long>> p1 (&c1, L"tag");
 			CPropertyContainerOfSimple<std::vector<long>> p2 (&c2, L"tag");
 			CPropertyContainerOfSimple<std::vector<long>> p3 (&c3, L"tag");
 			STANDARD_PROPERTY_TEST(p1, p2, p3);
 		}
 		{
-			std::list<double> c1 = boost::assign::list_of(1)(2)(3);
-			std::list<double>       c2 = boost::assign::list_of(1.0)(2.0)(3.0 - EPS_10/10.);
-			const std::list<double> c3 = boost::assign::list_of(1.0)(2.0)(3.0 + EPS_10);
+            std::list<double> c1 = { 1, 2, 3 };
+            std::list<double>       c2 = { 1.0, 2.0, 3.0 - EPS_10 / 10. };
+            const std::list<double> c3 = { 1.0, 2.0, 3.0 + EPS_10 };
 			CPropertyContainerOfSimple<std::list<double>> p1 (&c1, L"tag");
 			CPropertyContainerOfSimple<std::list<double>> p2 (&c2, L"tag");
 			CPropertyContainerOfSimple<std::list<double>> p3 (&c3, L"tag");
@@ -298,9 +456,9 @@ BOOST_AUTO_TEST_CASE(test_PropertiesSeparately)
 		const CFontDef fdCourier(L"Courier",12,0,false,true);
 		const CFontDef fdTahoma(L"Tahoma",12,0,false,false);
 		typedef std::map<std::wstring,CFontDef> map_of_struct_t;
-		map_of_struct_t mf1 = boost::assign::map_list_of(L"key1",fdArial)(L"key2",fdCourier).to_container(mf1);
+        map_of_struct_t mf1 = { {L"key1",fdArial}, {L"key2",fdCourier} };
 		map_of_struct_t mf2 = mf1;
-		map_of_struct_t mf3 = boost::assign::map_list_of(L"key2",fdCourier)(L"key3",fdTahoma).to_container(mf3);
+        map_of_struct_t mf3 = { {L"key2",fdCourier}, {L"key3",fdTahoma} };
 
 		CPropertyMapOfStruct<map_of_struct_t> p1( &mf1, L"pm1", &XML_serialization_helpers::Add, [](const map_of_struct_t::key_type& key) { return key; }, [](const std::wstring& key) { return key; } );
 		CPropertyMapOfStruct<map_of_struct_t> p2( &mf2, L"pm2", &XML_serialization_helpers::Add, [](const map_of_struct_t::key_type& key) { return key; }, [](const std::wstring& key) { return key; } );
@@ -314,9 +472,9 @@ BOOST_AUTO_TEST_CASE(test_PropertiesSeparately)
 		const CFontDef fdCourier(L"Courier", 12, 0, false, true);
 		const CFontDef fdTahoma(L"Tahoma", 12, 0, false, false);
 		typedef std::map<long, CFontDef> map_of_struct_t;
-		map_of_struct_t mf1 = boost::assign::map_list_of(1, fdArial)(1, fdCourier)(0, fdCourier).to_container(mf1);
+        map_of_struct_t mf1 = { {1, fdArial}, {1, fdCourier}, {0, fdCourier} };
 		map_of_struct_t mf2 = mf1;
-		map_of_struct_t mf3 = boost::assign::map_list_of(2, fdCourier)(3, fdTahoma).to_container(mf3);
+        map_of_struct_t mf3 = { {2, fdCourier}, {3, fdTahoma} };
 
 		CPropertyMapOfStruct<map_of_struct_t> p1(&mf1, L"pm1", &XML_serialization_helpers::Add, [](const long& key) { return std::to_wstring(key); }, [](const std::wstring& key) { return std::stol(key); });
 		CPropertyMapOfStruct<map_of_struct_t> p2(&mf2, L"pm2", &XML_serialization_helpers::Add, [](const long& key) { return std::to_wstring(key); }, [](const std::wstring& key) { return std::stol(key); });
@@ -338,9 +496,9 @@ BOOST_AUTO_TEST_CASE(test_PropertiesSeparately)
 				boost::shared_ptr<CClass> c1 = CClass::Instance(); c1->Init(1, 3.0);
 				boost::shared_ptr<CClass> c2 = CClass::Instance(); c2->Init(2, 2.0);
 				boost::shared_ptr<CClass> c3 = CClass::Instance(); c3->Init(3, 1.0);
-				m_vector = boost::assign::list_of(c1)(c2)(c3).to_container(m_vector);
-				m_list = boost::assign::list_of(c1)(c2)(c3).to_container(m_list);
-				m_map = boost::assign::map_list_of(L"1", c1)(L"2", c2)(L"3", c3).to_container(m_map);
+                m_vector = { c1,c2,c3 };
+                m_list = { c1,c2,c3 };
+                m_map = { {L"1", c1}, {L"2", c2}, {L"3", c3} };
 			}
 			bool operator==(const CClass& a) { return m_1 == a.m_1 && m_2 == a.m_2 && m_key == a.m_key; }
 			void operator=(const CClass& a) { m_1 = a.m_1; m_2 = a.m_2; m_key = a.m_key; }
@@ -392,18 +550,18 @@ BOOST_AUTO_TEST_CASE(test_PropertiesSeparately)
 				boost::shared_ptr<CClass> c1 = CClass::Instance(); c1->Init(1, 3.0); c1->Init();
 				boost::shared_ptr<CClass> c2 = CClass::Instance(); c2->Init(2, 2.0); c2->Init();
 				boost::shared_ptr<CClass> c3 = CClass::Instance(); c3->Init(3, 1.0); c3->Init();
-				ptrs_vector1 = boost::assign::list_of(c1)(c2)(c3).to_container(ptrs_vector1);
+                ptrs_vector1 = { c1, c2, c3 };
 			}
 			std::vector<boost::shared_ptr<CClass>> ptrs_vector2; {
 				boost::shared_ptr<CClass> c1 = CClass::Instance(); c1->Init(1, 3.0); c1->Init();
 				boost::shared_ptr<CClass> c2 = CClass::Instance(); c2->Init(2, 2.0); c2->Init();
 				boost::shared_ptr<CClass> c3 = CClass::Instance(); c3->Init(3, 1.0); c3->Init();
-				ptrs_vector2 = boost::assign::list_of(c1)(c2)(c3).to_container(ptrs_vector2);
+				ptrs_vector2 = { c1, c2, c3 };
 			}
 			std::vector<boost::shared_ptr<CClass>> ptrs_vector3; {
 				boost::shared_ptr<CClass> c1 = CClass::Instance(); c1->Init(1, 3.0); c1->Init();
 				boost::shared_ptr<CClass> c2 = CClass::Instance(); c2->Init(2, 2.0); c2->Init();
-				ptrs_vector3 = boost::assign::list_of(c1)(c2)(c2).to_container(ptrs_vector3);
+				ptrs_vector3 = { c1, c2, c2 };
 			}
 			CPropertyContainerOfPtrs<std::vector<boost::shared_ptr<CClass>>, CClass::COPY_OPERATOR, CClass::DECOMPOSITOR> p1(&ptrs_vector1, L"p1");
 			CPropertyContainerOfPtrs<std::vector<boost::shared_ptr<CClass>>, CClass::COPY_OPERATOR, CClass::DECOMPOSITOR> p2(&ptrs_vector2, L"p2");
@@ -545,14 +703,14 @@ BOOST_AUTO_TEST_CASE(test_CollectingProperties)
 	STop s1;
 	s1.m_I = 1;
 	s1.m_D = 3.14;
-	s1.m_S = L"ÚÂÒÚ";
+	s1.m_S = L"—Ç–µ—Å—Ç";
 	s1.m_E = e_item3;
 	s1.m_A[0] = 100;
 	s1.m_A[1] = 101;
 	s1.m_A[2] = 102;
-	s1.m_str_list = boost::assign::list_of(L"asdfgh")(L"qwerty")(L"yuiop")(L"lkjhg").to_container(s1.m_str_list);
-	s1.m_ngpstr_list = boost::assign::list_of(CNGPString(L"asdfgh"))(CNGPString(L"qwerty"))(CNGPString(L"yuiop")).to_container(s1.m_ngpstr_list);
-	s1.m_dbl_list = boost::assign::list_of(1000.12312312)(2)(321312.321312)(23123.657567)(0).to_container(s1.m_dbl_list);
+    s1.m_str_list = { L"asdfgh", L"qwerty", L"yuiop", L"lkjhg" };
+    s1.m_ngpstr_list = { CNGPString(L"asdfgh"), CNGPString(L"qwerty"), CNGPString(L"yuiop") };
+    s1.m_dbl_list = { 1000.12312312, 2, 321312.321312, 23123.657567, 0 };
 	s1.m_shared_arr_double.push_back(2.2); s1.m_shared_arr_double.push_back(2.3);
 	s1.m_shared_arr_string.push_back(L""); s1.m_shared_arr_string.push_back(L"aaa"); s1.m_shared_arr_string.push_back(L"bbbbb"); s1.m_shared_arr_string.push_back(L"ccccccc");
 	s1.m_map_of_structs[L"font1"] = CFontDef( L"Times New Roman", 12, 255, false, false );
@@ -591,11 +749,11 @@ BOOST_AUTO_TEST_CASE(test_CollectingProperties)
 		const fs::path test_dir = fs::current_path() / L"test_dir";
 		BOOST_CHECK(filesystem_utils::create_directory(test_dir));
 
-		props1.SaveToBinaryFile( test_dir / L"_·ËÌ_file.bin" );
+		props1.SaveToBinaryFile( test_dir / utf16_string("_–±–∏–Ω_file.bin") );
 		STop s3;
 		CPropertyRefCollection props3(L"root");
 		s3.Fill( props3 );
-		props3.LoadFromBinaryFile( test_dir / L"_·ËÌ_file.bin" );
+		props3.LoadFromBinaryFile( test_dir / utf16_string("_–±–∏–Ω_file.bin") );
 
 		const bool are_equal = NGP_VERIFY( props1 == props3 );
 		BOOST_CHECK( are_equal );
@@ -619,14 +777,12 @@ public:
 	virtual IGDBLightPtr GetGDBLight() const { return IGDBLightPtr();}
 	virtual INGPGeometryDatabasePtr GetGeometryDB() const { return INGPGeometryDatabasePtr(); }
 	virtual CNGPString GetGeometryDBVersionID() const { return CNGPString(); }  
-	virtual INGPExcelParamPtr GetEDBMaterialParameter(FWParameterType param_type, const wchar_ngp* mat_uuid, FwEngineeringDBContentTypes mat_type) const { return INGPExcelParamPtr(); }
+	virtual INGPUIExcelParamPtr GetEDBMaterialParameter(FWParameterType param_type, const wchar_ngp* mat_uuid, FwEngineeringDBContentTypes mat_type) const { return INGPUIExcelParamPtr(); }
 	virtual bool CollectReferences(const ngp_shared_array<ngp_rpr::GeomRef>& refs, INGPProgress* pProgress, bool combine, ngp_shared_array<ngp_rpr::INGPGeomManager::ReferencesLinks>& RefLinks) { return true; }
 	virtual bool GetDestGeomRef(const ngp_rpr::GeomRef& src_ref, bool update_ref_plane, bool allow_activate_config, const ngp_rpr::INGPGeomManager* dest_geom_mngr, ngp_rpr::GeomRef& dest_ref) const { return true; }
 	virtual bool PrepareGeometry_ParticleStudy(const ngp_shared_array<ngp_shared_array<ngp_rpr::GeomRef>>&, ngp_shared_array<INGPSlvFacePtr>& faces) { return true; }
 	virtual bool GetUpdateCADGeometry(bool bSaveGeomRefAttr, const NGPVisu::ICADGeometryPtr& geom, bool update_appearance) const { return true; }
-	virtual bool GetModelBodyName(const GUID &, CNGPString &) const override {return true;};
-	virtual bool GetMaterialNameByID(FwGeometryTypes gt, const GUID &, CNGPString &) const override {return true;};
-	virtual bool IsGDBLightPossible(const RESULTS_FILE_INFO& info) const override { return false; };
+	virtual bool IsGDBLightPossible(const vwr_io::RESULTS_FILE_INFO& info) const override { return false; };
 	virtual CNGPString FindAndCreateReferenceByGeomPath(const CADGeomPath&) override { return CNGPString(); }
 	virtual bool UpdateRefPlaneParams(const wchar_t* ref_uuid, FWPostGeomReferenceType ref_type, bool correct_pos, NGPPlaneGeomReference& plane) const override { return false; }
 
@@ -646,13 +802,13 @@ BOOST_AUTO_TEST_CASE(test_FeaturesSerialization)
 			box[2] = -val; box[3] = val;
 			box[4] = -val; box[5] = val;
 			boost::array<bool, 6> croppedSides = { false, true, false, false, false, false };
-			crop_plot->SetCropRegion(box);
-			crop_plot->SetCropedSides(croppedSides);
+			crop_plot->SetCropData(croppedSides, box);
 		}
 	};
 
 	//////////////////////////////////////////////////////////////////////////
 
+	BOOST_CHECK(true);
 	const fs::path test_dir = fs::current_path() / L"test_dir";
 	BOOST_CHECK(filesystem_utils::create_directory(test_dir));
 
@@ -727,13 +883,13 @@ BOOST_AUTO_TEST_CASE(test_FeaturesSerialization)
 	BOOST_CHECK(doc1->Save());
 	BOOST_CHECK(doc2->Save());
 
-	INGP_DocumentPtr loaded_doc1 = ngp_rpr::GetCreatePostprocessor()->LoadDocument(test_dir.c_str(), L"doc_name1");
+	INGP_DocumentPtr loaded_doc1 = ngp_rpr::GetCreatePostprocessor()->LoadDocument(test_dir.wstring().c_str(), L"doc_name1");
 	BOOST_CHECK(loaded_doc1->FindProject(L"proj1_uuid"));
 	BOOST_CHECK(loaded_doc1->FindConfiguration(L"cgf1_name")->FindProject(L"proj1_uuid")->GetProjectData()->GetCDOverallDim() == 4);
 	BOOST_CHECK(loaded_doc1->FindConfiguration(L"cgf1_name")->FindProject(L"proj2_uuid")->GetProjectData()->GetCDOverallDim() == 4.5);
 	BOOST_CHECK(loaded_doc1->GetName() == L"doc_name1");
 
-	INGP_DocumentPtr loaded_doc2 = ngp_rpr::GetCreatePostprocessor()->LoadDocument(test_dir.c_str(), L"doc_name2");
+	INGP_DocumentPtr loaded_doc2 = ngp_rpr::GetCreatePostprocessor()->LoadDocument(test_dir.wstring().c_str(), L"doc_name2");
 	BOOST_CHECK(loaded_doc2);
 	BOOST_CHECK(loaded_doc2->GetName() == L"doc_name2");
 
@@ -745,6 +901,8 @@ BOOST_AUTO_TEST_CASE(test_FeaturesSerialization)
 	{
 		for (FeatureType f = ft_cut_plot; f < ft_COUNT; f = FeatureType(f + 1))
 		{
+//			BOOST_TEST_MESSAGE("Test feature, type = " << f);
+
 			CFeaturePtr feat1 = feature_utils::CreateFeature(f);
 			BOOST_CHECK(feat1);
 
@@ -767,23 +925,23 @@ BOOST_AUTO_TEST_CASE(test_FeaturesSerialization)
 
 			const_cast<CNGPString&>(feat1->Name()) = (boost::wformat(L"name_%i") % (f*i)).str().c_str();
 
-			GeomRef gr1; gr1.uuid = L"id1"; gr1.name = L"ref1"; gr1.type = fwPostGeomReferencePlane;
-			GeomRef gr2; gr2.uuid = L"id2"; gr2.name = L"ÂÙÂÂÌÒ"; gr2.type = fwPostGeomReferenceFace;
-			GeomRef gr3; gr3.uuid = L"id2"; gr3.name = L"ref2"; gr3.type = fwPostGeomReferenceFace;
+			const GeomRef gr1 = rand_geom_ref();
+			const GeomRef gr2 = rand_geom_ref();
+			const GeomRef gr3 = rand_geom_ref();
 
 			VisParameter param4;
-			param4.uuid = L"Ô‡‡ÏÂÚ4";
+			param4.uuid = utf16_string("–ø–∞—Ä–∞–º–µ—Ç—Ä4").c_str();
 			VisParameter param3;
-			param3.uuid = L"Ô‡‡ÏÂÚ3";
+			param3.uuid = utf16_string("–ø–∞—Ä–∞–º–µ—Ç—Ä3").c_str();
 			VisParameter param2;
-			param2.uuid = L"Ô‡‡ÏÂÚ2";
+			param2.uuid = utf16_string("–ø–∞—Ä–∞–º–µ—Ç—Ä2").c_str();
 			VisParameter param1;
 			param1.uuid = L"param_uuid1";
 
-			#define ADD_GEOM_REFS(plot) const_cast<GEOM_REFS&>(plot->GetRefs()) = boost::assign::list_of(CGeomRef::Instance(gr1))(CGeomRef::Instance(gr2))(CGeomRef::Instance(gr3)).convert_to_container<GEOM_REFS>()
-			#define ADD_PARAMS(plot) const_cast<VIS_PARAMS&>(plot->GetParams()) = boost::assign::list_of(param1)(param2)(param3).convert_to_container<VIS_PARAMS>()
-			#define ADD_FLDS(plot) const_cast<std::vector<std::wstring>&>(plot->GetFlds()) = boost::assign::list_of(L"fld1")(L"ÙÎ‰")(L"fld3").convert_to_container<std::vector<std::wstring>>()
-			#define ADD_POINTS(plot) const_cast<std::vector<Point>&>(plot->GetPoints()) = boost::assign::list_of(Point())(Point())(Point()).convert_to_container<std::vector<Point>>()
+			#define ADD_GEOM_REFS(plot) const_cast<GEOM_REFS&>(plot->GetRefs()) = { CGeomRef::Instance(gr1), CGeomRef::Instance(gr2), CGeomRef::Instance(gr3) }
+			#define ADD_PARAMS(plot) const_cast<VIS_PARAMS&>(plot->GetParams()) = { param1, param2, param3 }
+			#define ADD_FLDS(plot) const_cast<std::vector<std::wstring>&>(plot->GetFlds()) = { L"fld1", utf16_string("—Ñ–ª–¥"), L"fld3" }
+			#define ADD_POINTS(plot) const_cast<std::vector<Point>&>(plot->GetPoints()) = { Point(), Point(), Point() }
 			#define SET_UUID(plot, u) const_cast<feature_id_t&>(plot->GetUUID()) = u;
 
 			switch (f) {
@@ -801,7 +959,7 @@ BOOST_AUTO_TEST_CASE(test_FeaturesSerialization)
 				break;}
 			case ft_goals_plot: {
 				CGoalPlotPtr plot = boost::static_pointer_cast<CGoalPlot>(feat1);
-				const_cast<GOALS_UUIDS&>(plot->_GetGoals()) = boost::assign::list_of(L"goal_uuid1")(L"ˆÂÎ¸_uuid2")(L"goal_uuid3").convert_to_container<GOALS_UUIDS>();
+                const_cast<GOALS_UUIDS&>(plot->_GetGoals()) = { L"goal_uuid1", utf16_string("—Ü–µ–ª—å_uuid2").c_str(), L"goal_uuid3" };
 				break;}
 			case ft_surf_params:
 			case ft_volume_params: {
@@ -821,29 +979,39 @@ BOOST_AUTO_TEST_CASE(test_FeaturesSerialization)
 				CFlowTrajectoriesPlotPtr plot = boost::static_pointer_cast<CFlowTrajectoriesPlot>(feat1);
 				ADD_GEOM_REFS(plot);
 				ADD_POINTS(plot);
-				const_cast<VIS_PARAMS&>(plot->GetFluidResParams()) = boost::assign::list_of(param1)(param2)(param3).convert_to_container<VIS_PARAMS>();
-				const_cast<VIS_PARAMS&>(plot->GetParticleParams()) = boost::assign::list_of(param1)(param2)(param3).convert_to_container<VIS_PARAMS>();
+                const_cast<VIS_PARAMS&>(plot->GetFluidResParams()) = { param1, param2, param3 };
+                const_cast<VIS_PARAMS&>(plot->GetParticleParams()) = { param1, param2, param3 };
 				break;}
 			case ft_particle_study:
 				{
 					CParticleStudyPtr plot = boost::static_pointer_cast<CParticleStudy>(feat1);
-					const_cast<VIS_PARAMS&>(plot->GetFluidResParams()) = boost::assign::list_of(param1)(param2)(param3).convert_to_container<VIS_PARAMS>();
-					const_cast<VIS_PARAMS&>(plot->GetParticleParams()) = boost::assign::list_of(param1)(param2)(param3).convert_to_container<VIS_PARAMS>();
+                    const_cast<VIS_PARAMS&>(plot->GetFluidResParams()) = { param1, param2, param3 };
+                    const_cast<VIS_PARAMS&>(plot->GetParticleParams()) = { param1, param2, param3 };
 					Init_CropRegion(plot, 0.2);
-					plot->SetMaxLength(500);
+					randomize( plot );
 
 					CParticleInjectionPtr inj1 = plot->_CreateInjection(L"inj1_uuid");
 					CParticleInjectionPtr inj2 = plot->_CreateInjection(L"inj2_uuid");
 					ADD_GEOM_REFS(inj1); ADD_POINTS(inj1);
 					ADD_GEOM_REFS(inj2); ADD_POINTS(inj2);
 					Init_CropRegion(inj1, 0.2);
-					Init_CropRegion(inj2, 0.2);
+					Init_CropRegion(inj2, 0.3);
+					randomize( inj1 );
+					randomize( inj2 );
+
+					inj2->SetUUID(L"inj2_uuid_new");
+
+					BOOST_CHECK(plot->GetInjections().size() == 2);
+					BOOST_CHECK(plot->_GetInjection(L"inj1_uuid"));
+					BOOST_CHECK(plot->_GetInjection(L"inj2_uuid_new"));
+					BOOST_CHECK(inj1->GetUUID() == L"inj1_uuid");
+					BOOST_CHECK(inj2->GetUUID() == L"inj2_uuid_new");
 
 					CParticleICPtr ic1 = CParticleIC::Instance();
 					CParticleICPtr ic2 = CParticleIC::Instance();
 					SET_UUID(ic1, L"ic1_uuid"); SET_UUID(ic2, L"ic2_uuid");
-					const_cast<INITIAL_CONDITIONS&>(inj1->GetInitialConditions()) = boost::assign::list_of(ic1)(ic2).convert_to_container<INITIAL_CONDITIONS>();
-					const_cast<INITIAL_CONDITIONS&>(inj2->GetInitialConditions()) = boost::assign::list_of(ic2)(ic1).convert_to_container<INITIAL_CONDITIONS>();
+                    const_cast<INITIAL_CONDITIONS&>(inj1->GetInitialConditions()) = { ic1, ic2 };
+                    const_cast<INITIAL_CONDITIONS&>(inj2->GetInitialConditions()) = { ic2, ic1 };
 
 					CParticleBCPtr bc1 = CParticleBC::Instance();
 					CParticleBCPtr bc2 = CParticleBC::Instance();
@@ -869,6 +1037,7 @@ BOOST_AUTO_TEST_CASE(test_FeaturesSerialization)
 					inj->SetUUID(L"INJ_UUID");
 
 					ADD_GEOM_REFS(inj); ADD_POINTS(inj);
+					randomize(inj);
 
 					CParticleStudyPtr ps = inj->GetPS();
 					BOOST_CHECK(ps);
@@ -878,7 +1047,7 @@ BOOST_AUTO_TEST_CASE(test_FeaturesSerialization)
 
 					inj->Init(ps.get()); //for ps_uuid
 
-					CParticleInjectionPtr inj_from_ps = ps->GetInjection(CParticleStudy::undefined_injection_uuid);
+					CParticleInjectionPtr inj_from_ps = ps->GetInjection(L"INJ_UUID");
 					BOOST_CHECK(inj_from_ps);
 
 					INGP_ParticleInjectionPtr inj_intrf;
@@ -907,7 +1076,7 @@ BOOST_AUTO_TEST_CASE(test_FeaturesSerialization)
 					filts.push_back(f);
 					ansys->SetParamValFilters(filts);
 
-					ansys->SetPath2ResFile(fs::temp_directory_path().c_str());
+					ansys->SetPath2ResFile(fs::temp_directory_path().wstring().c_str());
 					ADD_PARAMS(ansys);
 
 					break;
@@ -923,8 +1092,8 @@ BOOST_AUTO_TEST_CASE(test_FeaturesSerialization)
 
 						if (INGP_FluxBalance::NodeLayout* node = fb->AddNodeLayout(i))
 						{
-							node->x = i*7;
-							node->y = i*7;
+							node->x = i * 7;
+							node->y = i * 7;
 							node->appearance.at(0).DisplayTitle = (std::wstring(L"Node") + std::to_wstring(i)).c_str();
 							node->appearance.at(0).Font.Name = (std::wstring(L"Font") + std::to_wstring(i)).c_str();
 						}
@@ -944,16 +1113,23 @@ BOOST_AUTO_TEST_CASE(test_FeaturesSerialization)
 
 					break;
 				}
+			case ft_feature_proxy:
+				{
+					CFeatureProxyPtr fp = boost::static_pointer_cast<CFeatureProxy>(feat1);
+					ADD_GEOM_REFS(fp);
+					break;
+				}
 			}
 
 			//////////////////////////////////////////////////////////////////////////
 
-			const fs::path xml_file = (boost::wformat(L"feature ÚËÔ π%i.xml") % f).str().c_str();
+            std::wstring xml_file_name = utf16_string((boost::format("feature —Ç–∏–ø ‚Ññ%i") % f).str());
+            const fs::path xml_file = fs::path(xml_file_name).replace_extension("xml");
 			feat1->SaveToFile(test_dir / xml_file);
 
 			CFeaturePtr feat2 = feature_utils::CreateFeature(f);
 			feat2->LoadFromFile(test_dir / xml_file);
-			BOOST_CHECK(*feat1 == *feat2);
+			CHECK_EQUAL_FEATURES( feat1, feat2 );
 
 			{
 				ngp_shared_array<char> data1;
@@ -961,24 +1137,26 @@ BOOST_AUTO_TEST_CASE(test_FeaturesSerialization)
 
 				CFeaturePtr feat3 = feature_utils::CreateFeature(f);
 				BOOST_CHECK(feat3->Serialize(false, data1));
+				CHECK_EQUAL_FEATURES( feat1, feat3 );
 
 				ngp_shared_array<char> data2;
 				BOOST_CHECK(feat3->Serialize(true, data2));
 				BOOST_CHECK(data1.size() == data2.size() && std::equal(data1.begin(), data1.end(), data2.begin()));
-				BOOST_CHECK(*feat1 == *feat3);
 			}
 
-			BOOST_CHECK(CFeature::SaveFeature(*feat1, test_dir, (boost::wformat(L"feature ÚËÔ π%i") % f).str().c_str(), fs::path()));
-			CFeaturePtr loaded_feat1 = CFeature::LoadFeature(test_dir, (boost::wformat(L"feature ÚËÔ π%i") % f).str().c_str());
+			fs::path _saved_file;
+			BOOST_CHECK(CFeature::SaveFeature(*feat1, test_dir, xml_file_name, _saved_file));
+			CFeaturePtr loaded_feat1 = CFeature::LoadFeature(test_dir, xml_file_name);
 			BOOST_CHECK(loaded_feat1);
 			BOOST_CHECK(loaded_feat1->GetUUID() == feat1->GetUUID() && loaded_feat1->GetType() == feat1->GetType());
-			BOOST_CHECK(*feat1 == *loaded_feat1 && *loaded_feat1 == *feat2);
+			CHECK_EQUAL_FEATURES( feat1, loaded_feat1 );
+			CHECK_EQUAL_FEATURES( loaded_feat1, feat2 );
 
 			CFeaturePtr clone1 = feat1->_Clone();
 			CFeaturePtr clone2 = feat2->_Clone();
-			BOOST_CHECK(*clone1 == *clone2);
-
-			BOOST_CHECK(clone1->IsEqualTo(clone2));
+			CHECK_EQUAL_FEATURES( feat1, clone1 );
+			CHECK_EQUAL_FEATURES( feat2, clone2 );
+			CHECK_EQUAL_FEATURES( clone1, clone2 );
 
 			//////////////////////////////////////////////////////////////////////////
 
@@ -998,7 +1176,7 @@ BOOST_AUTO_TEST_CASE(test_FeaturesSerialization)
 			}
 
 			BOOST_CHECK(empty_feat->Assign(*feat1));
-			BOOST_CHECK(empty_feat->IsEqualTo(feat1));
+			CHECK_EQUAL_FEATURES(empty_feat, feat1);
 
 			//////////////////////////////////////////////////////////////////////////
 		}
@@ -1006,17 +1184,15 @@ BOOST_AUTO_TEST_CASE(test_FeaturesSerialization)
 
 	//////////////////////////////////////////////////////////////////////////
 
-#ifndef _DEBUG
-
 	const fs::path save_feats_dir = test_dir / L"save_features";
 	filesystem_utils::create_directory(save_feats_dir);
-	BOOST_CHECK(ngp_rpr::GetCreatePostprocessor()->SaveFeatures(save_feats_dir.c_str(), features));
-	for (int f = 0; f < features.size(); ++f) {	BOOST_CHECK(fs::exists((save_feats_dir /features[f]->GetUUID().c_str()).replace_extension(CFeature::feat_file_ext))); }
+	BOOST_CHECK(ngp_rpr::GetCreatePostprocessor()->SaveFeatures(save_feats_dir.wstring().c_str(), features));
+	for (int f = 0; f < features.size(); ++f) {	BOOST_CHECK(fs::exists(path_utils::concat(save_feats_dir / features[f]->GetUUID().c_str(), CFeature::feat_file_ext))); }
 
 	ngp_shared_array<CNGPString> feats_uuids;
 	for (const auto& f : features) feats_uuids.push_back(f->GetUUID());
 	ngp_shared_array<INGP_FeaturePtr> loaded_feats;
-	BOOST_CHECK(ngp_rpr::GetCreatePostprocessor()->LoadFeatures(save_feats_dir.c_str(), feats_uuids, loaded_feats));
+	BOOST_CHECK(ngp_rpr::GetCreatePostprocessor()->LoadFeatures(save_feats_dir.wstring().c_str(), feats_uuids, loaded_feats));
 	BOOST_CHECK(feats_uuids.size() == loaded_feats.size());
 
 	const fs::path save_feats_dir1 = test_dir / L"save_features" / L"1";
@@ -1034,8 +1210,8 @@ BOOST_AUTO_TEST_CASE(test_FeaturesSerialization)
 	}
 
 	BOOST_CHECK(ngp_rpr::GetCreatePostprocessor()->SaveFeatures(feats_store));
-	for (int f = 0; f < features.size(); ++f) { BOOST_CHECK(fs::exists((save_feats_dir1 / features[f]->GetUUID().c_str()).replace_extension(CFeature::feat_file_ext))); }
-	for (int f = 0; f < features.size(); ++f) {	BOOST_CHECK(fs::exists((save_feats_dir2 / features[f]->GetUUID().c_str()).replace_extension(CFeature::feat_file_ext))); }
+	for (int f = 0; f < features.size(); ++f) { BOOST_CHECK(fs::exists(path_utils::concat(save_feats_dir1 / features[f]->GetUUID().c_str(), CFeature::feat_file_ext))); }
+	for (int f = 0; f < features.size(); ++f) {	BOOST_CHECK(fs::exists(path_utils::concat(save_feats_dir2 / features[f]->GetUUID().c_str(), CFeature::feat_file_ext))); }
 
 	feats_store.clear();
 	ngp_shared_array<INGP_FeaturePtr> load_feats;
@@ -1057,13 +1233,13 @@ BOOST_AUTO_TEST_CASE(test_FeaturesSerialization)
 		BOOST_CHECK(CFeature::LoadFeatures(save_feats_dir1, feats, false));
 	}
 
-#endif
-
+	load_feats.clear();
+	loaded_feats.clear();
 	features.clear();
 
 	//////////////////////////////////////////////////////////////////////////
 
-	BOOST_CHECK(CFeature::InstanceCount() == 0);
+	BOOST_CHECK_EQUAL(CFeature::InstanceCount(), 0);
 
 	/////////////////////////////////////////////////////////////////////////////////
 
@@ -1164,7 +1340,7 @@ BOOST_AUTO_TEST_CASE(test_FeaturesSerialization)
 		const long DefLongValue = 127;
 
 		CClass3() {
-			m_vector = boost::assign::list_of(L"str1")(L"str2")(L"str3").to_container(m_vector);
+            m_vector = { L"str1", L"str2", L"str3" };
 		}
 
 		bool Save(wptree& tree) const
@@ -1278,12 +1454,12 @@ BOOST_AUTO_TEST_CASE(test_FeaturesSerialization)
 	BOOST_CHECK(key1.m_keys[4] == L"str1_4");
 
 	ngp_file_io::INGPFileIOPtr file = ngp_file_io::CreateFileIO();
-	BOOST_CHECK(file->open((test_dir / L"key.bin").c_str(), L"wb"));
+	BOOST_CHECK(file->open((test_dir / L"key.bin").wstring().c_str(), L"wb"));
 	BOOST_CHECK(key1.save(file));
 	file.reset();
 	ResFileKey key_saved;
 	file = ngp_file_io::CreateFileIO();
-	BOOST_CHECK(file->open((test_dir / L"key.bin").c_str(), L"rb"));
+	BOOST_CHECK(file->open((test_dir / L"key.bin").wstring().c_str(), L"rb"));
 	BOOST_CHECK(key_saved.load(file));
 	BOOST_CHECK(key1.is_equal(key_saved));
 	file.reset();
@@ -1312,7 +1488,7 @@ BOOST_AUTO_TEST_CASE(test_FeaturesSerialization)
 
 	{
 		{
-			std::wfstream fstr((test_dir / L"key1.txt").c_str(), std::wfstream::out|std::wfstream::trunc);
+			std::wfstream fstr((test_dir / L"key1.txt").string().c_str(), std::wfstream::out|std::wfstream::trunc);
 			BOOST_CHECK(fstr.is_open());
 			bool res = k1.serialize<std::wfstream, std::wstring>(fstr, true, true, [](const std::wstring& str) { return str.c_str(); } );
 			BOOST_CHECK(res);
@@ -1320,7 +1496,7 @@ BOOST_AUTO_TEST_CASE(test_FeaturesSerialization)
 
 		ResFileKey k2;
 		{
-			std::wfstream fstr((test_dir / L"key1.txt").c_str(), std::wfstream::in);
+			std::wfstream fstr((test_dir / L"key1.txt").string().c_str(), std::wfstream::in);
 			bool res = k2.serialize<std::wfstream, std::wstring>(fstr, false, true, [](const std::wstring& str) { return str.c_str(); } );
 			BOOST_CHECK(res);
 		}
@@ -1328,10 +1504,11 @@ BOOST_AUTO_TEST_CASE(test_FeaturesSerialization)
 		BOOST_CHECK(k1.is_equal(k2));
 	}
 
+#ifdef _WIN32
 	{
 		{
 			CFile theFile;
-			theFile.Open((test_dir / L"key3.bin").c_str(), CFile::modeCreate|CFile::modeWrite);
+			theFile.Open((test_dir / L"key3.bin").wstring().c_str(), CFile::modeCreate|CFile::modeWrite);
 			CArchive archive1(&theFile, CArchive::store);
 			bool res = k1.serialize<CArchive, CString>(archive1, true, false, [](const CString& str) { return str.GetString(); } );
 			BOOST_CHECK(res);
@@ -1340,7 +1517,7 @@ BOOST_AUTO_TEST_CASE(test_FeaturesSerialization)
 		ResFileKey k2;
 		{
 			CFile theFile;
-			theFile.Open((test_dir / L"key3.bin").c_str(), CFile::modeRead);
+			theFile.Open((test_dir / L"key3.bin").wstring().c_str(), CFile::modeRead);
 			CArchive archive2(&theFile, CArchive::load);
 			bool res = k2.serialize<CArchive, CString>(archive2, false, false, [](const CString& str) { return str.GetString(); } );
 			BOOST_CHECK(res);
@@ -1351,12 +1528,13 @@ BOOST_AUTO_TEST_CASE(test_FeaturesSerialization)
 		ResFileKey k3;
 		{
 			CFile theFile;
-			theFile.Open((test_dir / L"key3.bin").c_str(), CFile::modeRead);
+			theFile.Open((test_dir / L"key3.bin").wstring().c_str(), CFile::modeRead);
 			CArchive archive2(&theFile, CArchive::load);
 			bool res = k3.serialize<CArchive, CString>(archive2, false, false, [](const CString& str) { return str.GetString(); } ); 
 			BOOST_CHECK(res);
 		}
 	}
+#endif
 
 	//////////////////////////////////////////////////////////////////////////
 
@@ -1376,4 +1554,38 @@ BOOST_AUTO_TEST_CASE(test_CopyFromFT)
 	inj->CFTPIBase::CollectProperties( l_coll, CollectOptions(PF_Assignable) );
 	ft->CFTPIBase::CollectProperties( r_coll, CollectOptions(PF_Assignable) );
 	BOOST_CHECK( l_coll == r_coll );
+}
+
+BOOST_AUTO_TEST_CASE(Test_Feature_Serialization_Memory)
+{
+    using namespace ngp_file_io;
+    ngp_shared_array<char> buf;
+
+    GUID id = guid_utils::CreateUUID();
+    CNGPString sid = CNGPString(guid_utils::to_string(id).c_str());
+
+    {
+        CFeaturePtr feat = feature_utils::CreateFeature(ft_isosurface);
+        feat->SetUUID(sid);
+        feat->SetMovingReference(true);
+        feat->SetMovingDisplay(false);
+
+        auto io = CreateFileIO();
+        auto scp = make_mem_write_scope(io.get(), buf);
+        BOOST_CHECK(feat->Save(io));
+    }
+    {
+        auto io = CreateFileIO();
+        auto scp = make_mem_read_scope(io.get(), buf);
+
+        CFeaturePtr feat = CFeature::LoadFeature(io);
+        BOOST_CHECK(feat);
+        if (feat)
+        {
+            BOOST_CHECK(feat->GetType() == ft_isosurface);
+            BOOST_CHECK(feat->GetUUID() == sid);
+            BOOST_CHECK(feat->GetMovingReference() == true);
+            BOOST_CHECK(feat->GetMovingDisplay() == false);
+        }
+    }
 }
