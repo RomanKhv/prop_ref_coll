@@ -139,7 +139,7 @@ namespace ngp_file_io
 
 	typedef boost::shared_ptr<INGPFileIO> INGPFileIOPtr;
 
-	INGPFileIOPtr CreateFileIO() { return {}; }
+	inline INGPFileIOPtr CreateFileIO() { return {}; }
 
 	class ZIP_write_scope
 	{

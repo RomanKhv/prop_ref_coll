@@ -57,7 +57,6 @@ enum EPropertiesFilter {
 struct CollectOptions
 {
     const EPropertiesFilter m_filter;
-//    std::unique_ptr<CNGPUnistorage> m_ustg; //uses for temporary hold obsoleted properties in loading
 
     CollectOptions() : m_filter(PF_All) { }
     CollectOptions(EPropertiesFilter f) : m_filter(f) { }
@@ -146,7 +145,6 @@ private:
 	virtual CNGPString GetRootTag() const = 0;
 	virtual long GetVersion() const = 0;
 	virtual void CollectProperties(CPropertyTreeNode&, const CollectOptions&) const = 0;
-//	virtual bool OnAfterLoad(const CNGPUnistorage&, long ver) { return true; } //override this function if you need to convert obsoleted properties after loading
 
     bool Save(std::function<bool(const CPropertyRefCollection&)> save, EPropertiesFilter) const;
     bool Load(std::function<bool(CPropertyRefCollection&)> load, EPropertiesFilter);
@@ -172,7 +170,7 @@ bool operator==(const ngp_shared_array<TYPE>& lhs, const ngp_shared_array<TYPE>&
 template<typename TYPE>
 static bool _CompareOperator(const TYPE& a, const TYPE& b, const boost::true_type&) //if floating point value
 {
-	return CMathUtils::AreEqual10(a, b);
+	return std::fabs( a - b ) < 1e-10;
 }
 
 template<typename TYPE>
@@ -262,6 +260,8 @@ struct CPropertyBaseSaveLoadToBinFile<std::wstring>
         *pValue = s.c_str();
     }
 };
+
+//////////////////////////////////////////////////////////////////////////
 
 template<typename PROPERTY_TYPE>
 class CPropertyBase

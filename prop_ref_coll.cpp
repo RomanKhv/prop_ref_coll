@@ -1,6 +1,7 @@
 
 #include "stdafx.h"
 #include "prop_ref_coll.h"
+#include "xml_tags.h"
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -249,15 +250,15 @@ bool CPropertyRefCollection::SaveToBinaryFile(const fs::path& filename, const lo
 {
 	_ASSERTE( m_Options.m_filter==PF_Serializable || m_Options.m_filter==PF_All );
 
-    ngp_file_io::INGPFileIOPtr bin_file = ngp_file_io::CreateFileIO();
-    NGP_REQUIRE_b(bin_file->open(filename.wstring().c_str(), L"wb"));
+    //ngp_file_io::INGPFileIOPtr bin_file = ngp_file_io::CreateFileIO();
+    //NGP_REQUIRE_b(bin_file->open(filename.wstring().c_str(), L"wb"));
 
-    if (!NGP_VERIFY(SaveToBinaryFile(bin_file, refVersion)))
-    {
-        boost::system::error_code ec;
-        fs::remove(filename.c_str(), ec);
-        return false;
-    }
+    //if (!NGP_VERIFY(SaveToBinaryFile(bin_file, refVersion)))
+    //{
+    //    boost::system::error_code ec;
+    //    fs::remove(filename.c_str(), ec);
+    //    return false;
+    //}
 
     return true;
 }
@@ -287,10 +288,10 @@ bool CPropertyRefCollection::LoadFromBinaryFile(const fs::path& filename, const 
 	_ASSERTE( m_Options.m_filter==PF_Serializable || m_Options.m_filter==PF_All );
 
     ngp_file_io::INGPFileIOPtr bin_file = ngp_file_io::CreateFileIO();
-    NGP_VERIFY(bin_file->open(filename.wstring().c_str(), L"rb"));
-    
-    if (!NGP_VERIFY(LoadFromBinaryFile(bin_file, refVersion)))
-        return false;
+    //NGP_VERIFY(bin_file->open(filename.wstring().c_str(), L"rb"));
+    //
+    //if (!NGP_VERIFY(LoadFromBinaryFile(bin_file, refVersion)))
+    //    return false;
     return true;
 }
 
@@ -317,7 +318,7 @@ bool CCollectionableData::LoadFromFile(const fs::path& filename)
 
 	wptree tag;
 	try {
-		read_xml(input, tag);
+//		read_xml(input, tag);
 	}
 	catch (...)	{
 		return NGP_VERIFY(false);
@@ -379,10 +380,8 @@ bool CCollectionableData::Load(std::function<bool(CPropertyRefCollection&)> load
         const long version = 0;
         coll.Add(PROPERTY_SIMPLE_REF(version, tag_version, long));
 
-        opts.m_ustg = std::make_unique<CNGPUnistorage>();
         CollectProperties(coll, opts);
         load(coll);
-        OnAfterLoad(*opts.m_ustg, version);
     }
     catch (...) {
         return NGP_VERIFY(false);
@@ -422,7 +421,7 @@ bool CPropertyRefCollection::SaveTreeToFile(const fs::path& filename, const wptr
 		return false;
 
 	try {
-		write_xml(output, tag);
+//		write_xml(output, tag);
 	}
 	catch (...) {
 		boost::system::error_code ec;
@@ -445,8 +444,8 @@ bool CCollectionableData::SerializeAsPtree(bool save_load, ngp_shared_array<char
 
 		boost::iostreams::stream_buffer<boost::iostreams::back_insert_device<ngp_shared_array<char>>> buff(data);
 		std::iostream os(&buff);
-		boost::archive::binary_oarchive ar(os);
-		boost::property_tree::save(ar, tree, 1);
+		//boost::archive::binary_oarchive ar(os);
+		//boost::property_tree::save(ar, tree, 1);
 
 		return true;
 	}
@@ -455,10 +454,10 @@ bool CCollectionableData::SerializeAsPtree(bool save_load, ngp_shared_array<char
 		boost::iostreams::stream_buffer<boost::iostreams::basic_array_source<char>> buff(data.begin(), data.size());
 
 		std::iostream os(&buff);
-		boost::archive::binary_iarchive ar(os);
+//		boost::archive::binary_iarchive ar(os);
 
 		wptree tree;
-		boost::property_tree::load(ar, tree, 1);
+//		boost::property_tree::load(ar, tree, 1);
 
 		return LoadFromPTree(tree);
 	}

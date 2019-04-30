@@ -3,8 +3,17 @@
   <ItemGroup>
     <ClCompile Include="prc.cpp" />
     <ClCompile Include="StdAfx.cpp" />
+    <ClCompile Include="CNGPString.cpp" />
+    <ClCompile Include="prop_ref_coll.cpp" />
+    <ClCompile Include="test_header_compilation.cpp" />
+    <ClCompile Include="test_PropTree.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="StdAfx.h" />
+    <ClInclude Include="CNGPString.h" />
+    <ClInclude Include="CWStringShading.h" />
+    <ClInclude Include="INGPFileIO.h" />
+    <ClInclude Include="ngp_shared_array.h" />
+    <ClInclude Include="prop_ref_coll.h" />
   </ItemGroup>
 </Project>
