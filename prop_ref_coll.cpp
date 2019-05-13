@@ -334,8 +334,8 @@ bool CCollectionableData::Save(std::function<bool(const CPropertyRefCollection&)
 {
 	CPropertyRefCollection coll(GetRootTag(), filter);
 
-    const long version = GetVersion();
-    coll.Add(PROPERTY_SIMPLE_REF(version, tag_version, long));
+    const long version = GetVersion();	//TODO: const
+//    coll.Add(PROPERTY_SIMPLE_REF(version, tag_version, long));
 	CollectProperties(coll, coll.getOptions());
 
     try {
@@ -378,7 +378,7 @@ bool CCollectionableData::Load(std::function<bool(CPropertyRefCollection&)> load
 		CollectOptions& opts = coll.getOptions();
 
         const long version = 0;
-        coll.Add(PROPERTY_SIMPLE_REF(version, tag_version, long));
+//        coll.Add(PROPERTY_SIMPLE_REF(version, tag_version, long));
 
         CollectProperties(coll, opts);
         load(coll);

@@ -7,6 +7,7 @@
     <ClCompile Include="prop_ref_coll.cpp" />
     <ClCompile Include="test_header_compilation.cpp" />
     <ClCompile Include="test_PropTree.cpp" />
+    <ClCompile Include="test_PropTree_Add.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="StdAfx.h" />

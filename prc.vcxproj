@@ -58,6 +58,7 @@
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeaderFile>StdAfx.h</PrecompiledHeaderFile>
       <AdditionalIncludeDirectories>_boost</AdditionalIncludeDirectories>
+      <DisableSpecificWarnings>4010;4267</DisableSpecificWarnings>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -110,6 +111,7 @@
     </ClCompile>
     <ClCompile Include="test_header_compilation.cpp" />
     <ClCompile Include="test_PropTree.cpp" />
+    <ClCompile Include="test_PropTree_Add.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
