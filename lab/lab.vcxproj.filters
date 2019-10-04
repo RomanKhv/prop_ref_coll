@@ -4,6 +4,8 @@
     <ClCompile Include="lab.cpp" />
     <ClCompile Include="pch.cpp" />
     <ClCompile Include="sfinae_class_template.cpp" />
+    <ClCompile Include="prc_v1.cpp" />
+    <ClCompile Include="main.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pch.h" />
