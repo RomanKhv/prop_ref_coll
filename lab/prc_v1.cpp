@@ -7,6 +7,8 @@
 #include <memory>
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/xml_parser.hpp>
+#include <boost/make_shared.hpp>
+#include <boost/make_unique.hpp>
 
 #include "mpl.h"
 
@@ -22,7 +24,7 @@
 + set
 - map
 - ngp_shared_array
-- shared_ptr
++ shared_ptr
 - custom struct
 */
 
@@ -107,33 +109,24 @@ namespace prc
 		}
 	};
 
-// 	template <class T>
-// 	struct copy_adapter< T, typename mpl::is_range<T> >
-// 	{
-// 		static void process( T& lhs, const T& rhs )
-// 		{
-// 			lhs.assign( rhs.begin(), rhs.end() );
-// 		}
-// 	};
-// 
-// 	template <class T>
-// 	struct copy_adapter< T, std::set<T> >
-// 	{
-// 		static void process( T& lhs, const std::set<T>& rhs )
-// 		{
-// 			lhs.assign( rhs.begin(), rhs.end() );
-// 		}
-// 	};
-
 	template <class T>
-	struct copy_adapter< std::shared_ptr<T> >
+	struct copy_adapter< T, typename std::enable_if_t<mpl::is_smart_ptr<T>::value> >
 	{
-		static void process( const std::shared_ptr<T>& _in, std::shared_ptr<T>& _out )
+		static void process( const T& _in, T& _out )
 		{
 			if ( _in )
-				_out = std::make_shared<T>( *_in );
+				_out.reset( new T::element_type( *_in ) );
 			else
 				_out.reset();
+		}
+	};
+
+	template <class T>
+	struct copy_adapter< T, typename std::enable_if_t<mpl::is_smart_ptr<typename T::value_type>::value> >
+	{
+		static void process( const T& _in, T& _out )
+		{
+			static_assert( false, "std containers of smart pointers not yet supported" );
 		}
 	};
 
@@ -149,12 +142,21 @@ namespace prc
 	};
 
 	template <class T>
-	struct equal_adapter< std::shared_ptr<T> >
+	struct equal_adapter< T, typename std::enable_if_t<mpl::is_smart_ptr<T>::value> >
 	{
-		static bool process( const std::shared_ptr<T>& lhs, const std::shared_ptr<T>& rhs )
+		static bool process( const T& lhs, const T& rhs )
 		{
 			return lhs.get() == rhs.get() ||
-				lhs && rhs && equal_adapter<T>::process( *lhs, *rhs );
+				lhs && rhs && equal_adapter<T::element_type>::process( *lhs, *rhs );
+		}
+	};
+
+	template <class T>
+	struct equal_adapter< T, typename std::enable_if_t<mpl::is_smart_ptr<typename T::value_type>::value> >
+	{
+		static bool process( const T& lhs, const T& rhs )
+		{
+			static_assert(false, "std containers of smart pointers not yet supported");
 		}
 	};
 }
@@ -330,20 +332,21 @@ namespace prc
 	};
 
 	template <class T>
-	struct io_ptree_adapter< std::shared_ptr<T> >
+	struct io_ptree_adapter< T, typename std::enable_if_t<mpl::is_smart_ptr<T>::value> >
 	{
-		static void save( boost::property_tree::wptree& node, const std::shared_ptr<T>& sp )
+		static void save( boost::property_tree::wptree& node, const T& sp )
 		{
 			if ( sp )
-				io_ptree_adapter<T>::save( node, *sp );
+				io_ptree_adapter<T::element_type>::save( node, *sp );
 		}
-		static void load( const boost::property_tree::wptree& node, std::shared_ptr<T>& sp )
+		static void load( const boost::property_tree::wptree& node, T& sp )
 		{
-			if ( boost::optional<T> node_val = node.get_value_optional<T>() )
+			BOOST_ASSERT( std::is_default_constructible_v<T::element_type> );
+			if ( boost::optional<T::element_type> node_val = node.get_value_optional<T::element_type>() )
 			{
 				if ( !sp )
-					sp = std::make_shared<T>();
-				io_ptree_adapter<T>::load( node, *sp );
+					sp.reset( new T::element_type );
+				io_ptree_adapter<T::element_type>::load( node, *sp );
 			}
 			//else
 			//	sp.reset();
@@ -355,60 +358,66 @@ namespace prc
 
 #define TEST_COPY_EQUAL( T, ref_value ) \
 	{ \
-		const T src = (ref_value); \
+		const T src( ref_value ); \
 		T dst; \
 		prc::op_copy( src, dst ); \
 		BOOST_CHECK( prc::op_equal( src, dst ) ); \
 	}
 
-#define TEST_IO_FILE( T, ref_value, tag, filename ) \
+#define TEST_IO_FILE( T, ref_value, filename ) \
 	{ \
-		const T rhs = (ref_value); \
+		const T rhs( ref_value ); \
 		T lhs; \
 		boost::property_tree::wptree pt; \
-		prc::op_save( pt, tag, rhs ); \
-		prc::op_load( pt, tag, lhs ); \
+		prc::op_save( pt, L"tag", rhs ); \
+		prc::op_load( pt, L"tag", lhs ); \
 		BOOST_CHECK( prc::op_equal( lhs, rhs ) ); \
 		if ( filename ) { boost::property_tree::xml_writer_settings<std::wstring> xmlps; xmlps.indent_count = 4; boost::property_tree::write_xml( filename, pt, std::locale(), xmlps ); } \
 	}
 
-#define TEST_IO( T, ref_value, tag ) \
-	TEST_IO_FILE( T, ref_value, tag, nullptr )
+#define TEST_IO( T, ref_value ) \
+	TEST_IO_FILE( T, ref_value, nullptr )
 
-#define TEST_ALL_OPS( T, ref_value, tag ) \
+#define TEST_ALL_OPS( T, ref_value ) \
 	TEST_COPY_EQUAL( T, ref_value ); \
-	TEST_IO_FILE( T, ref_value, tag, nullptr );
+	TEST_IO_FILE( T, ref_value, nullptr );
 
 
 BOOST_AUTO_TEST_CASE( test_ptree )
 {
-	TEST_ALL_OPS( int, 273, L"my_int" );
-	TEST_ALL_OPS( double, 3.14, L"my_double" );
-	TEST_ALL_OPS( enum_t, enum2, L"my_enum" );
-	TEST_ALL_OPS( std::wstring, L"sample string", L"my_string" );
-	TEST_ALL_OPS( std::string, "sample string", L"my_string" );
-	TEST_ALL_OPS( std::vector<int>, ref_vec_of_ints, L"ivec"/*, "vec_of_ints.xml"*/ );
-	TEST_ALL_OPS( std::vector<enum_t>, ref_vec_of_enums, L"evec" );
-	TEST_ALL_OPS( std::set<enum_t>, ref_set_of_enums, L"eset" );
+	TEST_ALL_OPS( int, 273 );
+	TEST_ALL_OPS( double, 3.14 );
+	TEST_ALL_OPS( enum_t, enum2 );
+	TEST_ALL_OPS( std::wstring, L"sample string" );
+	TEST_ALL_OPS( std::string, "sample string" );
+	TEST_ALL_OPS( std::vector<int>, ref_vec_of_ints/*, "vec_of_ints.xml"*/ );
+	TEST_ALL_OPS( std::vector<enum_t>, ref_vec_of_enums );
+	TEST_ALL_OPS( std::set<enum_t>, ref_set_of_enums );
 	//TEST_IO( std::map<enum_t,double>, ref_map, L"map" );
-	TEST_ALL_OPS( std::vector<std::vector<int>>, ref_vec_of_vec_of_ints, L"ivecvec"/*, "vec_of_vec_of_ints.xml"*/ );
-// 	{
-// 		const std::shared_ptr<int> rhs = std::make_shared<int>( 273 );
-// 		std::shared_ptr<int> lhs;
-// 		prc::op_copy( lhs, rhs );
-// 		BOOST_CHECK( lhs != rhs );
-// 		BOOST_CHECK( prc::op_equal( lhs, rhs ) );
-// 	}
-	//{
-	//	const std::vector<std::shared_ptr<int>> rhs = { std::make_shared<int>( 1 ), std::make_shared<int>( 2 ), std::make_shared<int>( 3 ) };
-	//	std::vector<std::shared_ptr<int>> lhs;
-	//	boost::property_tree::wptree pt;
-	//	prc::op_save( pt, L"vec_sp", rhs );
-	//	prc::op_load( pt, L"vec_sp", lhs );
-	//	BOOST_REQUIRE_EQUAL( lhs.size(), rhs.size() );
-	//	BOOST_CHECK( lhs[0].get() != rhs[0].get() );
-	//	BOOST_CHECK( prc::op_equal( lhs, rhs ) );
-	//}
+	TEST_ALL_OPS( std::vector<std::vector<int>>, ref_vec_of_vec_of_ints/*, "vec_of_vec_of_ints.xml"*/ );
+	TEST_ALL_OPS( std::shared_ptr<int>, std::make_shared<int>( 273 ) );
+	TEST_ALL_OPS( std::unique_ptr<int>, std::make_unique<int>( 273 ) );
+	TEST_ALL_OPS( boost::shared_ptr<int>, boost::make_shared<int>( 273 ) );
+	TEST_ALL_OPS( boost::scoped_ptr<int>, ( new int(273) ) );
+	{
+		const std::vector<std::shared_ptr<int>> src = { std::make_shared<int>( 1 ), std::make_shared<int>( 2 ), std::make_shared<int>( 3 ) };
+// 		{
+// 			std::vector<std::shared_ptr<int>> dst;
+// 			prc::op_copy( src, dst );
+// 			BOOST_REQUIRE_EQUAL( dst.size(), src.size() );
+// 			BOOST_CHECK( dst[0].get() != src[0].get() );
+// 			BOOST_CHECK( prc::op_equal( src, dst ) );
+// 		}
+// 		{
+// 			std::vector<std::shared_ptr<int>> dst;
+// 			boost::property_tree::wptree pt;
+// 			prc::op_save( pt, L"vec_sp", src );
+// 			prc::op_load( pt, L"vec_sp", dst );
+// 			BOOST_REQUIRE_EQUAL( dst.size(), src.size() );
+// 			BOOST_CHECK( dst[0].get() != src[0].get() );
+// 			BOOST_CHECK( prc::op_equal( src, dst ) );
+// 		}
+	}
 	{
 		const int src[3] = { 1, 2, 3 };
 		{

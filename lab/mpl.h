@@ -6,13 +6,15 @@ namespace mpl
 {
 //////////////////////////////////////////////////////////////////////////
 
-// namespace detail
-// {
-// template <class...> struct void_type { using type = void; };
-// }
-// 
-// 	template <class... T>
-// 	using void_t = typename detail::void_type<T...>::type;
+	template <class T> struct is_shared_ptr                       : std::false_type {};
+	template <class T> struct is_shared_ptr<std::shared_ptr<T>>   : std::true_type {};
+	template <class T> struct is_shared_ptr<boost::shared_ptr<T>> : std::true_type {};
+
+	template <class T> struct is_smart_ptr                       : std::false_type {};
+	template <class T> struct is_smart_ptr<std::unique_ptr<T>>   : std::true_type {};
+	template <class T> struct is_smart_ptr<std::shared_ptr<T>>   : std::true_type {};
+	template <class T> struct is_smart_ptr<boost::scoped_ptr<T>> : std::true_type {};
+	template <class T> struct is_smart_ptr<boost::shared_ptr<T>> : std::true_type {};
 
 //////////////////////////////////////////////////////////////////////////
 
