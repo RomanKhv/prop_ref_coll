@@ -25,7 +25,7 @@
 - map
 - ngp_shared_array
 + shared_ptr
-- custom struct
++ custom struct
 */
 
 // custom types
@@ -63,8 +63,14 @@ namespace prc
 	template <class S, class T, class = void>
 	struct io_adapter
 	{
-		static void save( S& stream, const wchar_t* tag, const T& value );
-		static void load( const S& stream, const wchar_t* tag, T& value );
+		static void save( S& stream, const wchar_t* tag, const T& value )
+		{
+			static_assert( false, "cannot serialize to" );
+		}
+		static void load( const S& stream, const wchar_t* tag, T& value )
+		{
+			static_assert( false, "cannot deserialize from" );
+		}
 	};
 
 	// Main 4 Ops
@@ -352,6 +358,34 @@ namespace prc
 			//	sp.reset();
 		}
 	};
+
+	template <class T>
+	struct io_ptree_adapter< T, typename std::void_t<decltype(std::declval<T>().save( std::declval<boost::property_tree::wptree&>() ) ),
+												     decltype(std::declval<T>().load( std::declval<const boost::property_tree::wptree&>() ) )> >
+	{
+		static void save( boost::property_tree::wptree& node, const T& value )
+		{
+			value.save( node );
+		}
+		static void load( const boost::property_tree::wptree& node, T& value )
+		{
+			value.load( node );
+		}
+	};
+
+	template <class T>
+	struct io_ptree_adapter< T, typename std::void_t<decltype(save_to_ptree( std::declval<boost::property_tree::wptree&>(), std::declval<const T&>() )),
+												     decltype(load_from_ptree( std::declval<const boost::property_tree::wptree&>(), std::declval<T&>() ))> >
+	{
+		static void save( boost::property_tree::wptree& node, const T& value )
+		{
+			save_to_ptree( node, value );
+		}
+		static void load( const boost::property_tree::wptree& node, T& value )
+		{
+			load_from_ptree( node, value );
+		}
+	};
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -383,7 +417,7 @@ namespace prc
 	TEST_IO_FILE( T, ref_value, nullptr );
 
 
-BOOST_AUTO_TEST_CASE( test_ptree )
+BOOST_AUTO_TEST_CASE( test_std_types )
 {
 	TEST_ALL_OPS( int, 273 );
 	TEST_ALL_OPS( double, 3.14 );
@@ -431,6 +465,91 @@ BOOST_AUTO_TEST_CASE( test_ptree )
 			prc::op_save( pt, L"tag", src );
 			prc::op_load( pt, L"tag", dst );
 			BOOST_CHECK( prc::op_equal( src, dst ) );
+		}
+	}
+}
+
+class MyClass_builtin
+{
+public:
+	MyClass_builtin() = default;
+	explicit MyClass_builtin(enum_t e) : _EValue(e) {}
+
+	bool operator==( const MyClass_builtin& rhs ) const { return _EValue == rhs._EValue; }
+
+	void save( boost::property_tree::wptree& tree ) const
+	{
+		tree.add( L"e-value", (long&) _EValue );
+		tree.add( L"i-value", _IValue );
+	}
+
+	void load( const boost::property_tree::wptree& tree )
+	{
+		if ( boost::optional<const boost::property_tree::wptree&> item_node = tree.get_child_optional( L"e-value" ) )
+			if ( boost::optional<long> node_val = item_node->get_value_optional<long>() )
+				_EValue = (enum_t)*node_val;
+		if ( boost::optional<const boost::property_tree::wptree&> item_node = tree.get_child_optional( L"i-value" ) )
+			if ( boost::optional<int> node_val = item_node->get_value_optional<int>() )
+				_IValue = *node_val;
+	}
+
+private:
+	enum_t _EValue = enum2;
+	int _IValue = 7;
+};
+
+class MyClass_external
+{
+public:
+	MyClass_external() = default;
+	explicit MyClass_external(enum_t e) : _EValue(e) {}
+
+	bool operator==( const MyClass_external& rhs ) const { return _EValue == rhs._EValue; }
+
+	enum_t _EValue = enum2;
+	int _IValue = 7;
+};
+
+void save_to_ptree( boost::property_tree::wptree& tree, const MyClass_external& obj )
+{
+	tree.add( L"e-value", (long&) obj._EValue );
+	tree.add( L"i-value", obj._IValue );
+}
+
+void load_from_ptree( const boost::property_tree::wptree& tree, MyClass_external& obj )
+{
+	if ( boost::optional<const boost::property_tree::wptree&> item_node = tree.get_child_optional( L"e-value" ) )
+		if ( boost::optional<long> node_val = item_node->get_value_optional<long>() )
+			obj._EValue = (enum_t)*node_val;
+	if ( boost::optional<const boost::property_tree::wptree&> item_node = tree.get_child_optional( L"i-value" ) )
+		if ( boost::optional<int> node_val = item_node->get_value_optional<int>() )
+			obj._IValue = *node_val;
+}
+
+BOOST_AUTO_TEST_CASE( Test_Custom_Struct )
+{
+	{
+		const MyClass_builtin src( enum3 );
+		TEST_COPY_EQUAL( MyClass_builtin, src );
+		{
+			MyClass_builtin dst;
+			boost::property_tree::wptree pt;
+			prc::op_save( pt, L"tag", src );
+			prc::op_load( pt, L"tag", dst );
+// 			src.save( pt, L"tag" );
+// 			dst.load( pt, L"tag" );
+			BOOST_CHECK( prc::op_equal( dst, src ) );
+		}
+	}
+	{
+		const MyClass_external src( enum3 );
+		TEST_COPY_EQUAL( MyClass_external, src );
+		{
+			MyClass_external dst;
+			boost::property_tree::wptree pt;
+			prc::op_save( pt, L"tag", src );
+			prc::op_load( pt, L"tag", dst );
+			BOOST_CHECK( prc::op_equal( dst, src ) );
 		}
 	}
 }
